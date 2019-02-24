@@ -4,6 +4,8 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from keras.utils import Sequence
+from keras.layers import Dense, Embedding, Input, Concatenate, Reshape
+from keras.models import Model
 
 def load_batch(path: str):
     data_dict = pickle.load(open(path, 'rb'), encoding='bytes')
@@ -32,6 +34,21 @@ class DataGenerator(Sequence):
                 color_values)
 
 
+def create_network(num_images: int, embedding_dim: int):
+    coordinates = Input(shape=[2])
+    embedding_input = Input(shape=(None, ))
+    embedded_image_input = Embedding(num_images, embedding_dim, input_length=1)(embedding_input)
+    embedded_image_input = Reshape([-1])(embedded_image_input)
+    x = Concatenate(axis=-1)([coordinates, embedded_image_input])
+    x = Dense(128, activation='relu')(x)
+    x = Dense(64, activation='relu')(x)
+    x = Dense(32, activation='relu')(x)
+    x = Dense(3, activation='sigmoid')(x)
+
+    return Model(inputs = [coordinates, embedding_input],
+                 outputs = x)
+       
+
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument('--train_data',
@@ -42,9 +59,8 @@ def parse_args():
 def main():
     args = parse_args()
     data, _  = load_batch(args.train_data)
-    gen = DataGenerator(data, 4)
-    l = gen.__getitem__(0)
-    import pdb; pdb.set_trace()
+    generator = DataGenerator(data)
+    net = create_network(len(generator), 20)
 
 if __name__ == '__main__':
     main()
