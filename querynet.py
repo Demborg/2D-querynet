@@ -35,8 +35,8 @@ class DataGenerator(Sequence):
 
 
 def create_network(num_images: int, embedding_dim: int):
-    coordinates = Input(shape=[2])
-    embedding_input = Input(shape=(None, ))
+    coordinates = Input(shape=[2], name='coordinates')
+    embedding_input = Input(shape=(None, ), name='idx')
     embedded_image_input = Embedding(num_images, embedding_dim, input_length=1)(embedding_input)
     embedded_image_input = Reshape([-1])(embedded_image_input)
     x = Concatenate(axis=-1)([coordinates, embedded_image_input])
@@ -47,20 +47,49 @@ def create_network(num_images: int, embedding_dim: int):
 
     return Model(inputs = [coordinates, embedding_input],
                  outputs = x)
-       
+
+
+def image_from_idx(model, idx):
+    coordinates = np.array(list(np.ndindex(32, 32)))
+
+    y = model.predict_on_batch({'coordinates': coordinates,
+                 'idx': np.repeat(idx, len(coordinates))})
+    
+    img = np.zeros([32, 32, 3])    
+    for c, v in zip(coordinates, y):
+        img[c[0],c[1] :] = v      
+    return img
 
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument('--train_data',
                         default='data/cifar-10-batches-py/data_batch_1',
                         type=str)
+    parser.add_argument('--validation_data',
+                        default='data/cifar-10-batches-py/data_batch_5',
+                        type=str)
+    parser.add_argument('--test_data',
+                        default='data/cifar-10-batches-py/test_batch',
+                        type=str)
+    parser.add_argument('--epochs', default=10, type=int)
     return parser.parse_args()
 
 def main():
     args = parse_args()
     data, _  = load_batch(args.train_data)
-    generator = DataGenerator(data)
-    net = create_network(len(generator), 20)
+    train_generator = DataGenerator(data[:100,:])
+
+    model = create_network(len(train_generator), 20)
+    model.compile('adam', loss='mean_squared_error')
+    model.fit_generator(train_generator,
+                        epochs=args.epochs)
+    
+    img = image_from_idx(model, 0)
+    plt.imshow(img)
+    plt.figure()
+    plt.imshow(data[0, :])
+    plt.show()
+
 
 if __name__ == '__main__':
     main()
