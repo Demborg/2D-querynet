@@ -40,9 +40,14 @@ def create_network(num_images: int, embedding_dim: int):
     embedded_image_input = Embedding(num_images, embedding_dim, input_length=1)(embedding_input)
     embedded_image_input = Reshape([-1])(embedded_image_input)
     x = Concatenate(axis=-1)([coordinates, embedded_image_input])
-    x = Dense(128, activation='relu')(x)
     x = Dense(64, activation='relu')(x)
-    x = Dense(32, activation='relu')(x)
+    x = Dense(64, activation='relu')(x)
+    x = Dense(64, activation='relu')(x)
+    x = Dense(62, activation='relu')(x)
+    x = Concatenate(axis=-1)([coordinates, x])
+    x = Dense(64, activation='relu')(x)
+    x = Dense(64, activation='relu')(x)
+    x = Dense(64, activation='relu')(x)
     x = Dense(3, activation='sigmoid')(x)
 
     return Model(inputs = [coordinates, embedding_input],
@@ -77,19 +82,22 @@ def parse_args():
 def main():
     args = parse_args()
     data, _  = load_batch(args.train_data)
-    train_generator = DataGenerator(data[:100,:])
+    train_generator = DataGenerator(data[:10,:])
 
-    model = create_network(len(train_generator), 20)
+    model = create_network(len(train_generator), 30)
     model.compile('adam', loss='mean_squared_error')
     model.fit_generator(train_generator,
-                        epochs=args.epochs)
+                        epochs=args.epochs,
+                        steps_per_epoch=1000)
     
-    img = image_from_idx(model, 0)
-    plt.imshow(img)
-    plt.figure()
-    plt.imshow(data[0, :])
+    for i in range(10):
+        plt.figure('GT')
+        plt.subplot(10, 1, i + 1)
+        plt.imshow(image_from_idx(model, i))
+        plt.figure('Pred')
+        plt.subplot(10, 1, i + 1)
+        plt.imshow(data[i, ...])
     plt.show()
-
 
 if __name__ == '__main__':
     main()
