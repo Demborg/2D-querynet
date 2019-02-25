@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from keras.utils import Sequence
 from keras.layers import Dense, Embedding, Input, Concatenate, Reshape
-from keras.models import Model
+from keras.models import Model, load_model
 
 def load_batch(path: str):
     data_dict = pickle.load(open(path, 'rb'), encoding='bytes')
@@ -76,20 +76,30 @@ def parse_args():
     parser.add_argument('--test_data',
                         default='data/cifar-10-batches-py/test_batch',
                         type=str)
+    parser.add_argument('--model_path',
+                        default='trained_models/querynet.h5',
+                        type=str)
+    parser.add_argument('--load', action='store_true')
     parser.add_argument('--epochs', default=10, type=int)
     return parser.parse_args()
 
 def main():
     args = parse_args()
     data, _  = load_batch(args.train_data)
-    train_generator = DataGenerator(data[:10,:])
 
-    model = create_network(len(train_generator), 30)
-    model.compile('adam', loss='mean_squared_error')
-    model.fit_generator(train_generator,
-                        epochs=args.epochs,
-                        steps_per_epoch=1000)
-    
+    if args.load:
+        model = load_model(args.model_path)
+    else:
+        train_generator = DataGenerator(data[:100,:])
+
+        model = create_network(len(train_generator), 30)
+        model.compile('adam', loss='mean_squared_error')
+        model.fit_generator(train_generator,
+                            epochs=args.epochs,
+                            steps_per_epoch=10000)
+        
+        model.save(args.model_path)
+
     for i in range(10):
         plt.figure('GT')
         plt.subplot(10, 1, i + 1)
@@ -98,6 +108,7 @@ def main():
         plt.subplot(10, 1, i + 1)
         plt.imshow(data[i, ...])
     plt.show()
+
 
 if __name__ == '__main__':
     main()
