@@ -11,12 +11,15 @@ kiwisolver==1.0.1
 Markdown==3.0.1
 matplotlib==3.0.2
 numpy==1.16.1
+pkg-resources==0.0.0
 protobuf==3.6.1
 pyparsing==2.3.1
 python-dateutil==2.8.0
 PyYAML==3.13
+scikit-learn==0.20.2
 scipy==1.2.1
 six==1.12.0
+sklearn==0.0
 tensorboard==1.12.2
 tensorflow==1.12.0
 termcolor==1.1.0

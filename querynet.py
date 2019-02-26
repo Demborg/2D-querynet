@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 from keras.utils import Sequence
 from keras.layers import Dense, Embedding, Input, Concatenate, Reshape
 from keras.models import Model, load_model
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+
 
 def load_batch(path: str):
     data_dict = pickle.load(open(path, 'rb'), encoding='bytes')
@@ -29,17 +32,26 @@ class DataGenerator(Sequence):
                                        query_points_y,
                                        :]
         query_coordinates = np.stack([query_points_x, query_points_y], -1)
+        
+        #put all images between zero and one:
+        query_coordinates = query_coordinates / self.data_array.shape[1:3]
+
         return ({'coordinates': query_coordinates,
                  'idx': np.repeat(idx, self.batch_size)},
                 color_values)
 
-
-def create_network(num_images: int, embedding_dim: int):
-    coordinates = Input(shape=[2], name='coordinates')
-    embedding_input = Input(shape=(None, ), name='idx')
-    embedded_image_input = Embedding(num_images, embedding_dim, input_length=1)(embedding_input)
+def create_representation(num_images: int, embedding_dim: int):
+    idx = Input(shape=(None, ), name='idx')
+    embedded_image_input = Embedding(num_images, embedding_dim, input_length=1)(idx)
     embedded_image_input = Reshape([-1])(embedded_image_input)
-    x = Concatenate(axis=-1)([coordinates, embedded_image_input])
+
+    return Model(inputs=idx, outputs=embedded_image_input)
+
+
+def create_render_network(embedding_dim: int):
+    coordinates = Input(shape=[2], name='coordinates')
+    latent_vec = Input(shape=[embedding_dim], name='latent_vec')
+    x = Concatenate(axis=-1)([coordinates, latent_vec])
     x = Dense(64, activation='relu')(x)
     x = Dense(64, activation='relu')(x)
     x = Dense(64, activation='relu')(x)
@@ -50,17 +62,27 @@ def create_network(num_images: int, embedding_dim: int):
     x = Dense(64, activation='relu')(x)
     x = Dense(3, activation='sigmoid')(x)
 
-    return Model(inputs = [coordinates, embedding_input],
+    return Model(inputs = [coordinates, latent_vec],
                  outputs = x)
 
-
-def image_from_idx(model, idx):
-    coordinates = np.array(list(np.ndindex(32, 32)))
-
-    y = model.predict_on_batch({'coordinates': coordinates,
-                 'idx': np.repeat(idx, len(coordinates))})
+def make_training_model(num_images: int, embedding_dim: int):
+    rep = create_representation(num_images, embedding_dim)
+    render = create_render_network(embedding_dim)
+    coordinates = Input(shape=[2], name='coordinates')
     
-    img = np.zeros([32, 32, 3])    
+    output = render([coordinates, rep.output])
+    return Model(inputs=[coordinates, rep.input], outputs=output)
+
+
+
+def image_from_idx(model, idx, image_size=(32, 32)):
+    coordinates = np.array(list(np.ndindex(*image_size)))
+    q_coordinates = coordinates / image_size
+
+    y = model.predict_on_batch({'coordinates': q_coordinates,
+                 'idx': np.repeat(idx, len(q_coordinates))})
+    
+    img = np.zeros([*image_size, 3])    
     for c, v in zip(coordinates, y):
         img[c[0],c[1] :] = v      
     return img
@@ -79,34 +101,59 @@ def parse_args():
     parser.add_argument('--model_path',
                         default='trained_models/querynet.h5',
                         type=str)
+    parser.add_argument('--limit_images',
+                        default=None,
+                        type=int)
     parser.add_argument('--load', action='store_true')
     parser.add_argument('--epochs', default=10, type=int)
+    parser.add_argument('--steps_per_epoch', default=None, type=int)
     return parser.parse_args()
+
+def encoder_plot(model, data):
+    for i in range(10):
+        plt.figure('GT')
+        plt.subplot(5, 2, i + 1)
+        plt.imshow(image_from_idx(model, i))
+        plt.figure('Pred')
+        plt.subplot(5, 2, i + 1)
+        plt.imshow(data[i, ...])
+
+def embedding_plot(embeddings, labels):
+    pca = PCA(n_components=2)
+    plt.figure("PCA")
+    X = pca.fit_transform(embeddings)
+    print('explained variance ratio (first two components): %s'
+      % str(pca.explained_variance_ratio_))
+    plt.scatter(X[:,0], X[:,1], c=labels, cmap='tab10', alpha=0.3)
+
+    #plt.figure("t-sne")
+    #X_tsne = TSNE(n_components=2).fit_transform(embeddings)
+    #plt.scatter(X_tsne[:,0], X_tsne[:,1], c=labels, cmap='tab10')
+    
 
 def main():
     args = parse_args()
-    data, _  = load_batch(args.train_data)
+    data, labels  = load_batch(args.train_data)
 
     if args.load:
         model = load_model(args.model_path)
     else:
-        train_generator = DataGenerator(data[:100,:])
+        train_generator = DataGenerator(data[:args.limit_images,:])
 
-        model = create_network(len(train_generator), 30)
+        model = make_training_model(len(train_generator), 30)
         model.compile('adam', loss='mean_squared_error')
         model.fit_generator(train_generator,
                             epochs=args.epochs,
-                            steps_per_epoch=10000)
+                            steps_per_epoch=args.steps_per_epoch)
         
         model.save(args.model_path)
 
-    for i in range(10):
-        plt.figure('GT')
-        plt.subplot(10, 1, i + 1)
-        plt.imshow(image_from_idx(model, i))
-        plt.figure('Pred')
-        plt.subplot(10, 1, i + 1)
-        plt.imshow(data[i, ...])
+    encoder_plot(model, data)
+    
+    embedding_plot(model.get_layer('embedding_1').get_weights()[0],
+            labels[:args.limit_images])
+    plt.figure('super sample')
+    plt.imshow(image_from_idx(model, 0, image_size=(512, 512)))
     plt.show()
 
 
