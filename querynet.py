@@ -34,7 +34,7 @@ class DataGenerator(Sequence):
                                        :]
         query_coordinates = np.stack([query_points_x, query_points_y], -1)
         
-        #put all images between zero and one:
+        # put all images between zero and one:
         query_coordinates = query_coordinates / self.data_array.shape[1:3]
 
         return ({'coordinates': query_coordinates,
@@ -146,7 +146,7 @@ def auto_decode(data: np.ndarray, model: Model, dim, samples: int = 1024):
     output = model([coordinates, rep.output])
     full = Model(inputs=[coordinates, rep.input], outputs=output)
     full.compile('adam', loss='mean_squared_error')
-    full.fit_generator(generator, epochs=10, steps_per_epoch=10)
+    full.fit_generator(generator, epochs=10, steps_per_epoch=1000)
     plt.figure('Auto decoded')
     plt.subplot(211)
     plt.imshow(image_from_idx(full, 0, image_size=(512, 512)))
